@@ -1,45 +1,50 @@
+require('dotenv').config()
 const express = require('express')
-// body-parser? path?
+const bodyParser = require('body-parser')
+const path = require('path')
 const mongoose = require('mongoose')
-const dotenv = require('dotenv')
-const Article = require('./models/article')
-const articleRouter = require('./routes/articles')
-// const methodOverride = require('method-override') add
+const session = require('express-session')
+const MongoDBStore = require('connect-mongodb-session')(session)
+
+const articleRoute = require('./routes/articles.route')
+const adminRoute = require('./routes/admin.route')
+const authRoute = require('./routes/auth.route')
+
+// const Article = require('./models/article')
+const User = require('./models/user')
 const app = express()
 
-dotenv.config()
-
-// no need?
-// {useNewUrlParser: true, useUnifiedTopology: true, useCreateIndex: true }
-
-mongoose.connect(process.env.MONGO_URL)
-    .then(console.log('connected to MongoDB'))
-    .catch(err => console.log(err))
-
-app.set('view engine', 'ejs')
-app.use(express.urlencoded({ extended: false }))
-// app.use(methodOverride('_method'))
-
-
-app.get('/', async (req,res) => {
-    const articles = await Article.find().sort({ createdAt: 'desc' })
-    res.render('articles/index', { articles: articles })
+const store = new MongoDBStore({
+    uri: process.env.MONGODB_URL,
+    collection: 'sessions'
 })
 
-app.use('/articles', articleRouter)
+app.set('view engine', 'ejs')
+app.use(bodyParser.urlencoded({ extended: false }))
+app.use(express.static(path.join(__dirname, 'public')))
+app.use(session({
+    secret: 'himitsu',
+    resave: false,
+    saveUninitialized: false,
+    store: store
+}))
 
-// change to POST later
-app.listen(8000)
+app.use((req,res,next) => {
+    res.locals.isAuth = req.session.isLoggedIn
+    next()
+})
 
 
+app.use('/admin', adminRoute)
+app.use(articleRoute)
+app.use(authRoute)
 
+// app.use((req,res,next) => {
+//     res.status(404).render('404', { pageTitle: 'Page Not Found'})
+// })
 
-// "dependencies": {
-//     "dompurify": "^2.0.8",
-//     "ejs": "^3.0.1",
-//     "express": "^4.17.1",
-//     "jsdom": "^16.2.1",
-//     "marked": "^0.8.0",
-//     "method-override": "^3.0.0",
-//     "mongoose": "^5.9.4",
-//     "slugify": "^1.4.0"
+const PORT = process.env.PORT || 8000
+
+mongoose.connect(process.env.MONGODB_URL, () => {
+    app.listen(PORT)
+})
